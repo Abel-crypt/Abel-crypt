@@ -1,0 +1,83 @@
+from datetime import datetime, timezone
+from typing import Dict, List
+from cybotrade.strategy import Strategy as BaseStrategy
+from cybotrade.runtime import StrategyTrader
+from cybotrade.models import (
+    RuntimeConfig,
+    RuntimeMode,
+)
+from cybotrade.permutation import Permutation
+import numpy as np
+import asyncio
+import logging
+import colorlog
+import pandas as pd
+
+
+class Strategy(BaseStrategy):
+    datasource_data = []
+    candle_data = []
+    start_time = datetime.utcnow()
+
+    def __init__(self):
+        handler = colorlog.StreamHandler()
+        handler.setFormatter(
+            colorlog.ColoredFormatter(f"%(log_color)s{Strategy.LOG_FORMAT}")
+        )
+        file_handler = logging.FileHandler(
+            "cryptoquant-data-source-extraction.log"
+        )
+        file_handler.setLevel(logging.INFO)
+        super().__init__(log_level=logging.INFO, handlers=[handler, file_handler])
+
+    async def on_candle_closed(self, strategy, topic, symbol):
+        # Retrieve list of candle data for corresponding symbol that candle closed.
+        logging.info("candle data {}".format(super().data_map[topic][-1]))
+        self.candle_data.append(super().data_map[topic][-1])
+
+    async def on_datasource_interval(
+        self, strategy: StrategyTrader, topic: str, data_list
+    ):
+        logging.info("datasource data {}".format(super().data_map[topic][-1]))
+        self.datasource_data.append(super().data_map[topic][-1])
+
+    async def on_backtest_complete(self, strategy: StrategyTrader):
+        df = pd.DataFrame(self.datasource_data)
+        df.to_csv("dfjsd.csv")  # <<<<<<<<取csv名字
+
+        # df = pd.DataFrame(self.candle_data)
+        # df.to_csv("bybit_candle_btc_1d.csv")
+
+        time_taken = datetime.utcnow() - self.start_time
+        print("Total time taken: ", time_taken)
+
+
+config = RuntimeConfig(
+    mode=RuntimeMode.Backtest,
+    datasource_topics=[
+        "cryptoquant|1m|btc/market-indicator/sopr?exchange=binance&window=day"
+    ],  # cryptoquant 找API Link
+    candle_topics=["candles-1d-BTC/USDT-bybit"],
+    active_order_interval=1,
+    initial_capital=10_000.0,
+    exchange_keys="credentials.json",
+    start_time=datetime(2020, 5, 11, 0, 0, 0, tzinfo=timezone.utc),
+    end_time=datetime(2024, 5,11, 0, 0, 0, tzinfo=timezone.utc),
+    data_count=1000,
+    api_key="MVrhHV9ACjDbxFM43Eswu0AOPPJVvt4U9Q4K0ydzg4H3Z2AC",  # 用Cybotrade API 拿数据
+    api_secret="PNBHpucevGxMZvu5MV308GZJkNvbuLCWmS8TZsyGlm5xstS2e3bBB6GN3DNezzO7sAz1coVi",
+)
+
+permutation = Permutation(config)
+hyper_parameters = {}
+hyper_parameters["sma"] = np.arange(10, 20, 30)
+
+
+async def start():
+    await permutation.run(hyper_parameters, Strategy)
+
+
+asyncio.run(start())
+
+# MrnKlaikeKo3hlOL7uRwvVpaPbrkUXrTsjACIVNeIGirxbCG
+# pnAaL7lgy1RL9tWuHYZT2pYK3UksENg22F4QYGxfyTUQbR2aHUTv2jQIhKy10MFuFYG3v1ek
